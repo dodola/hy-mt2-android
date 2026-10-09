@@ -6,6 +6,10 @@
 Run Tencent's Hy-MT2 1.8B translation model fully on-device on Android: a llama.cpp-based JNI engine with the 1.25-bit
 STQ1_0 kernel, a faster prefill kernel, a threadpool fix, and a Compose app that picks backend and core pinning per SoC.
 
+<p align="center"><img src="docs/images/app-translate.png" width="320" alt="Hy-MT2 Translate on RK3588"></p>
+<p align="center"><sub>RK3588 板子上的截图：英→中翻译，1.25-bit 模型，4 个大核。底部统计来自一句很短的文本（41 个提示词 token、12 个输出 token），
+首 token 与预热占比大，速度低于下方稳态基准。</sub></p>
+
 ## 状态 / Status
 
 | 平台 | 状态 | 说明 |
