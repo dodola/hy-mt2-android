@@ -15,7 +15,7 @@ a threadpool fix, and per-SoC selection of backend and core pinning.
 | Platform | Status | Notes |
 |---|---|---|
 | Rockchip RK3588 | **Measured on a real device** | CPU (NEON dotprod) path, numbers below |
-| Qualcomm Snapdragon | **Built, not verified on hardware** | Hexagon NPU / Adreno OpenCL / CPU (i8mm) compile and are packaged in the APK. No Snapdragon device was available, so nothing was run; speeds in the docs are extrapolated estimates |
+| Qualcomm Snapdragon | **Verified on one device** (Snapdragon 8 Elite) | Hexagon NPU, Adreno OpenCL and CPU all run; other SoCs (HTP v73/v75/v81, Adreno 7xx) untested, see [docs/snapdragon.md](docs/snapdragon.md) |
 
 On the tested RK3588 firmware the Mali GPU and the NPU are not usable: the llama.cpp OpenCL backend rejects Mali, Vulkan is only 1.1, and the NPU driver (v0.8.2) is too old.
 See [docs/rk3588.md](docs/rk3588.md).
@@ -50,7 +50,7 @@ Full tables and how to reproduce them: [docs/benchmarks.md](docs/benchmarks.md).
 Requires the Android SDK, NDK 28.2.13676358, CMake, Ninja and JDK 17.
 
 ```bash
-# 1. Fetch llama.cpp (pinned to master de7fa0a) and apply the patches
+# 1. Fetch llama.cpp (pinned to master de7fa0a) and apply the patches; if github.com is blocked set LLAMA_GIT_URL=<mirror>
 scripts/setup_llama.sh
 
 # 2. After preparing a model (see below), build and install the app
@@ -61,20 +61,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### Models
 
-Model files are not in this repository. The 1.25-bit model comes from [AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF](https://huggingface.co/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF),
-Q4_0 from [unsloth/Hy-MT2-1.8B-GGUF](https://huggingface.co/unsloth/Hy-MT2-1.8B-GGUF). Follow the Hy-MT2 license when using them.
+**Download in the app**: open it, pick a model under "Download a model" and tap Download. Downloads resume, the SHA-256 is
+checked, and the 1.25-bit file's type id (42 -> 43) is fixed automatically. Snapdragon with the Hexagon NPU is pointed at Q4_0; every other device at the 1.25-bit model.
 
-```bash
-# Tencent's file uses type id 42 for STQ1_0, the upstream PR uses 43; only the header changes, tensor data is untouched
-python3 -I scripts/remap_gguf_types.py hymt2-1.8b-stq1_0.gguf 42:43
-# Optional: requantize token_embd to Q4_0/Q5_0 for faster decode
-python3 -I scripts/requant_embd.py hymt2-1.8b-stq1_0.gguf hymt2-1.8b-stq1_0-embq4_0.gguf q4_0
-# Put it in the app's private dir (files pushed to the sdcard with adb are not readable by the app)
-adb push hymt2-1.8b-stq1_0-embq4_0.gguf /data/local/tmp/
-adb shell run-as com.hymt2.app cp /data/local/tmp/hymt2-1.8b-stq1_0-embq4_0.gguf files/
-```
+**The default source is ModelScope**, reachable from mainland China; hf-mirror.com and Hugging Face are fallbacks only. All three serve
+the same file names and SHA-256. Repos: [AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF](https://modelscope.cn/models/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF),
+[unsloth/Hy-MT2-1.8B-GGUF](https://modelscope.cn/models/unsloth/Hy-MT2-1.8B-GGUF). Model files are not in this repository; follow the Hy-MT2 license.
 
-You can also pick the file with the **Import** button in the app.
+No network, or want another quantization? Manual install, checksums, and how to build without GitHub: [docs/models.md](docs/models.md).
+The **Import** button also takes a local file.
 
 ### Command-line benchmark
 
@@ -89,18 +84,19 @@ adb shell "cd /data/local/tmp/hymt2 && LD_LIBRARY_PATH=lib taskset f0 ./lib/llam
 ### Qualcomm
 
 ```bash
-scripts/build_snapdragon.sh          # builds Hexagon / Adreno OpenCL / CPU (i8mm) inside Docker
+SD_DL=1 scripts/build_snapdragon.sh # builds Hexagon / Adreno OpenCL / CPU (i8mm) inside Docker
 scripts/stage_snapdragon_libs.sh     # copies them to android/app/src/main/jniLibs/arm64-v8a/
 ```
 
 How to run, the quantization support matrix per backend, and a benchmark checklist are in [docs/snapdragon.md](docs/snapdragon.md).
-According to the source, Hexagon and Adreno support Q4_0 but not STQ1_0, so STQ1_0 runs on the CPU only. **These paths have not been verified on a Snapdragon device.**
+According to the source, Hexagon and Adreno support Q4_0 but not STQ1_0, so STQ1_0 runs on the CPU only. **Verified on a Snapdragon 8 Elite (HONOR PPG-AN00, Android 17): Q4_0 on the Hexagon NPU gives about 1900 t/s prefill and 43 t/s decode; STQ1_0 on the CPU about 36 t/s decode.** The app needs the plugin-style backends from `SD_DL=1 scripts/build_snapdragon.sh`, not the default monolithic build.
 
 ## Known limitations
 
 - The 2-bit (Q2_0C) model is not supported: there is no upstream kernel and the format is not public.
 - In-app decode is about 22 t/s versus 24.8 t/s on the command line.
-- No unit tests yet; `SocDetector` and `CpuTopology` are written as pure functions to make testing easy.
+- Unit tests only cover `RuntimePolicy`, `CpuTopology` and `SocDetector` (9 JVM cases); the JNI engine and UI are untested.
+- On Snapdragon 8 Elite the ggml thread pool stalls when threads land on the prime cores (cpu6/7); the app avoids them, root cause not found.
 - The Android UI follows interaction ideas from [google-ai-edge/gallery](https://github.com/google-ai-edge/gallery); no code was reused.
 
 ## Layout
@@ -109,7 +105,7 @@ According to the source, Hexagon and Adreno support Q4_0 but not STQ1_0, so STQ1
 android/            Kotlin + Compose app and JNI engine
 patches/llama.cpp/  5 patches against llama.cpp
 scripts/            build, model conversion, benchmark scripts
-docs/               benchmarks / rk3588 / snapdragon
+docs/               models / benchmarks / rk3588 / snapdragon
 ```
 
 ## License

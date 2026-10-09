@@ -17,7 +17,7 @@ STQ1_0 kernel, a faster prefill kernel, a threadpool fix, and a Compose app that
 | 平台 | 状态 | 说明 |
 |---|---|---|
 | Rockchip RK3588 | **已在真机实测** | CPU（NEON dotprod）路径，见下方数据 |
-| Qualcomm Snapdragon | **已构建，未在真机验证** | Hexagon NPU / Adreno OpenCL / CPU(i8mm) 已编译并打进 APK；没有骁龙设备，没跑过，文档中的速度只是外推估算 |
+| Qualcomm Snapdragon | **已在 1 台真机实测**（骁龙 8 Elite） | Hexagon NPU / Adreno OpenCL / CPU 均跑通；其他骁龙型号（HTP v73/v75/v81、Adreno 7xx）未测，详见 [docs/snapdragon.md](docs/snapdragon.md) |
 
 RK3588 的 Mali GPU 和 NPU 在测试固件上走不通（OpenCL 后端不接受 Mali、Vulkan 只有 1.1、NPU 驱动 v0.8.2 过旧）。详见 [docs/rk3588.md](docs/rk3588.md)。
 
@@ -48,7 +48,7 @@ RK3588 的 Mali GPU 和 NPU 在测试固件上走不通（OpenCL 后端不接受
 需要：Android SDK + NDK 28.2.13676358、CMake、Ninja、JDK 17。
 
 ```bash
-# 1. 获取并打补丁 llama.cpp（固定在 master de7fa0a）
+# 1. 获取并打补丁 llama.cpp（固定在 master de7fa0a）；GitHub 不通时用 LLAMA_GIT_URL=<镜像> 覆盖
 scripts/setup_llama.sh
 
 # 2. 准备模型（见下）后，构建并安装 App
@@ -59,20 +59,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### 模型
 
-模型文件不在仓库里。1.25-bit 模型来自 [AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF](https://huggingface.co/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF)，
-Q4_0 来自 [unsloth/Hy-MT2-1.8B-GGUF](https://huggingface.co/unsloth/Hy-MT2-1.8B-GGUF)。使用前请遵守 Hy-MT2 的许可。
+**App 内直接下载**：打开 App，未安装的模型会显示在 “Download a model”，点 Download 即可，断点续传、自动校验 SHA-256，
+1.25-bit 模型的类型 id（42→43）也由 App 自动修正。按设备推荐：带 Hexagon NPU 的骁龙推荐 Q4_0，其他设备推荐 1.25-bit。
 
-```bash
-# Tencent 文件里 STQ1_0 的类型 id 是 42，上游 PR 里是 43，改头部即可（数据不动）
-python3 -I scripts/remap_gguf_types.py hymt2-1.8b-stq1_0.gguf 42:43
-# 可选：把 token_embd 降为 Q4_0/Q5_0，解码更快
-python3 -I scripts/requant_embd.py hymt2-1.8b-stq1_0.gguf hymt2-1.8b-stq1_0-embq4_0.gguf q4_0
-# 推到 App 私有目录（adb push 到 sdcard 的文件 App 读不了）
-adb push hymt2-1.8b-stq1_0-embq4_0.gguf /data/local/tmp/
-adb shell run-as com.hymt2.app cp /data/local/tmp/hymt2-1.8b-stq1_0-embq4_0.gguf files/
-```
+**下载源默认是魔搭（ModelScope）**，国内可直连；hf-mirror.com 和 Hugging Face 仅作失败时的兜底。三处文件名与 SHA-256 完全一致。
+来源仓库：[AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF](https://modelscope.cn/models/AngelSlim/Hy-MT2-1.8B-1.25Bit-GGUF)、
+[unsloth/Hy-MT2-1.8B-GGUF](https://modelscope.cn/models/unsloth/Hy-MT2-1.8B-GGUF)。模型文件不在本仓库里，使用前请遵守 Hy-MT2 的许可。
 
-也可以用 App 里的 **Import** 按钮选择文件。
+没网或想用别的量化？手动安装、校验值、构建脚本在没有 GitHub 时的替代方式，见 [docs/models.md](docs/models.md)。
+App 里的 **Import** 按钮也可以选本地文件。
 
 ### 命令行基准
 
@@ -87,18 +82,19 @@ adb shell "cd /data/local/tmp/hymt2 && LD_LIBRARY_PATH=lib taskset f0 ./lib/llam
 ### 高通
 
 ```bash
-scripts/build_snapdragon.sh          # Docker 里构建 Hexagon / Adreno OpenCL / CPU(i8mm)
+SD_DL=1 scripts/build_snapdragon.sh # Docker 里构建 Hexagon / Adreno OpenCL 插件（App 用）；不带 SD_DL 是 adb 命令行用的整体构建
 scripts/stage_snapdragon_libs.sh     # 拷到 android/app/src/main/jniLibs/arm64-v8a/
 ```
 
 运行方式、各量化格式在各后端的支持矩阵、基准清单见 [docs/snapdragon.md](docs/snapdragon.md)。
-按源码，Hexagon 和 Adreno 支持 Q4_0 但不支持 STQ1_0；STQ1_0 只走 CPU。**这些路径尚未在骁龙真机上验证。**
+按源码，Hexagon 和 Adreno 支持 Q4_0 但不支持 STQ1_0；STQ1_0 只走 CPU。**已在骁龙 8 Elite（荣耀 PPG-AN00，Android 17）上实测：Q4_0 走 Hexagon NPU 预填充约 1900 t/s、解码约 43 t/s；STQ1_0 走 CPU 解码约 36 t/s。** App 用的是 `SD_DL=1 scripts/build_snapdragon.sh`（插件形式的后端），不是默认的整体构建。
 
 ## 已知限制
 
 - 2-bit（Q2_0C）模型不支持：上游没有对应内核，格式未公开。
 - App 内解码约 22 t/s，命令行 24.8 t/s，还差一点。
-- 没有单元测试；`SocDetector`、`CpuTopology` 已写成便于测试的纯函数。
+- 单元测试只覆盖 `RuntimePolicy` / `CpuTopology` / `SocDetector`（9 个用例，JVM）；JNI 引擎和 UI 没有测试。
+- 骁龙 8 Elite 上 STQ1_0 在 prime 核（cpu6/7）上线程池会停滞，App 已避开它们；根因未查明。
 - 本仓库的 Android 前端参考了 [google-ai-edge/gallery](https://github.com/google-ai-edge/gallery) 的交互思路，没有复用其代码。
 
 ## 目录
@@ -107,7 +103,7 @@ scripts/stage_snapdragon_libs.sh     # 拷到 android/app/src/main/jniLibs/arm64
 android/            Kotlin + Compose 应用与 JNI 引擎
 patches/llama.cpp/  对 llama.cpp 的 5 个补丁
 scripts/            构建、模型转换、基准脚本
-docs/               benchmarks / rk3588 / snapdragon
+docs/               models / benchmarks / rk3588 / snapdragon
 ```
 
 ## 许可

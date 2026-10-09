@@ -18,17 +18,21 @@ The native build uses `GGML_BACKEND_DL=ON` + `GGML_CPU_ALL_VARIANTS=ON`: seven
 CPU at startup (RK3588 / Cortex-A76 → `armv8.2_2`, dotprod). Optional GPU/NPU backends
 (`libggml-opencl.so`, `libggml-hexagon.so`, `libggml-htp-v*.so`) are picked up automatically if
 dropped into `app/src/main/jniLibs/arm64-v8a/`; absent backends are simply skipped.
-Run `scripts/build_snapdragon.sh` then `scripts/stage_snapdragon_libs.sh` to stage the Snapdragon set (Adreno OpenCL, Hexagon
+Run `SD_DL=1 scripts/build_snapdragon.sh` (plugin-style backends; the default monolithic build cannot be loaded by the app) then `scripts/stage_snapdragon_libs.sh` to stage the Snapdragon set (Adreno OpenCL, Hexagon
 NPU + HTP skeletons); the manifest declares `libOpenCL.so`/`libcdsprpc.so` and the engine sets `ADSP_LIBRARY_PATH`.
-Verified only that the APK with these libs installs and runs unchanged on RK3588 (backends don't register there); the
-Hexagon/OpenCL offload itself has **not** been run on a Snapdragon device.
+Verified on RK3588 (backends don't register there) and on a Snapdragon 8 Elite (SM8750): Q4_0 offloads to HTP0 (pp128 1605 / tg64 43 t/s),
+STQ1_0 runs on the CPU. On Qualcomm the app copies the HTP skeletons to `files/htp` for `ADSP_LIBRARY_PATH` and pins CPU threads to the
+performance cores, skipping the prime pair (see docs/snapdragon.md). Unit tests: `./gradlew-run.sh :app:testDebugUnitTest`.
 
 ## Models
 
-Searched in: `/sdcard/Android/data/com.hymt2.app/files/`, the app's `files/`, `/data/local/tmp/hymt2/`
-(the latter is not readable by the app on most devices). Files pushed with `adb push` to the
-sdcard dir are root-owned and **not readable** on the RK3588 box, so for a debug build copy via
-`run-as`:
+The app downloads models itself (ModelScope first, then hf-mirror.com and Hugging Face; resumable, SHA-256 checked, Tencent's
+STQ1_0 type id 42 rewritten to 43). See [../docs/models.md](../docs/models.md) for sources, checksums and behaviour. Code: `model/ModelDownloader.kt`,
+`model/GgufTypeRemap.kt`, catalog in `model/ModelSpec.kt`.
+
+Manual install still works. Searched in: `/sdcard/Android/data/com.hymt2.app/files/`, the app's `files/`, `/data/local/tmp/hymt2/`
+(the latter is not readable by the app on most devices). Files pushed with `adb push` to the sdcard dir are root-owned and **not
+readable** on the RK3588 box, so for a debug build copy via `run-as`:
 
 ```bash
 adb push models/hymt2-1.8b-stq1_0.gguf /data/local/tmp/hymt2/

@@ -35,6 +35,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.hymt2.app.engine.GenerationStats
+import com.hymt2.app.model.DownloadPhase
+import com.hymt2.app.model.KnownModels
+import com.hymt2.app.model.ModelSpec
 import com.hymt2.app.translate.Language
 import com.hymt2.app.translate.Languages
 
@@ -64,6 +67,8 @@ fun TranslateScreen(vm: TranslateViewModel) {
                 OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Import") }
             }
             if (s.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+
+            DownloadSection(s, onDownload = vm::downloadModel, onCancel = vm::cancelDownload)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Picker(
@@ -102,6 +107,48 @@ fun TranslateScreen(vm: TranslateViewModel) {
             Text(s.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         }
     }
+}
+
+/** Lists downloadable models that are not installed yet, with the one that suits this device first. */
+@Composable
+private fun DownloadSection(s: UiState, onDownload: (ModelSpec) -> Unit, onCancel: () -> Unit) {
+    val installed = s.models.map { it.spec.id }.toSet()
+    val pending = KnownModels.downloadable.filter { it.id !in installed || s.download?.specId == it.id }
+        .sortedByDescending { it.id == s.recommendedModelId }
+    if (pending.isEmpty()) return
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Download a model", style = MaterialTheme.typography.titleSmall)
+            pending.forEach { spec ->
+                val active = s.download?.takeIf { it.specId == spec.id }
+                val sizeMb = (spec.remote?.sizeBytes ?: 0L) / (1024 * 1024)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text(spec.label, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "$sizeMb MB" + if (spec.id == s.recommendedModelId) " · recommended for this device" else "",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
+                    if (active != null) OutlinedButton(onClick = onCancel) { Text("Pause") }
+                    else OutlinedButton(onClick = { onDownload(spec) }, enabled = s.download == null) { Text("Download") }
+                }
+                active?.let { DownloadBar(it.progress) }
+            }
+            Text("Large files: use Wi-Fi. Downloads resume if interrupted.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun DownloadBar(p: com.hymt2.app.model.DownloadProgress?) {
+    if (p == null || p.totalBytes <= 0) { LinearProgressIndicator(Modifier.fillMaxWidth()); return }
+    val verifying = p.phase == DownloadPhase.VERIFYING
+    LinearProgressIndicator(progress = { p.doneBytes.toFloat() / p.totalBytes }, modifier = Modifier.fillMaxWidth())
+    Text(
+        (if (verifying) "Verifying " else "") + "${p.doneBytes / (1024 * 1024)} / ${p.totalBytes / (1024 * 1024)} MB",
+        style = MaterialTheme.typography.labelMedium,
+    )
 }
 
 @Composable

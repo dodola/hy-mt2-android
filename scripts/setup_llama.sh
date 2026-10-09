@@ -5,9 +5,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE=de7fa0a
 DIR="${LLAMA_DIR:-$ROOT/third_party/llama.cpp}"
+# github.com may be unreachable (e.g. mainland China): point LLAMA_GIT_URL at a mirror or a local clone.
+URL="${LLAMA_GIT_URL:-https://github.com/ggml-org/llama.cpp}"
 if [ ! -d "$DIR/.git" ]; then
   mkdir -p "$(dirname "$DIR")"
-  git clone https://github.com/ggml-org/llama.cpp "$DIR"
+  git clone "$URL" "$DIR"
 fi
 cd "$DIR"
 git checkout -q -B hymt2 "$BASE"
