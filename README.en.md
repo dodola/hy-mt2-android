@@ -32,6 +32,20 @@ See [docs/rk3588.md](docs/rk3588.md).
 Decode is memory-bandwidth bound, so smaller weights are faster; prefill is compute bound, where Q4_0 wins.
 Full tables and how to reproduce them: [docs/benchmarks.md](docs/benchmarks.md).
 
+## Measured results (Snapdragon 8 Elite / SM8750, HONOR PPG-AN00, Android 17)
+
+| Model | Backend | Prefill pp128 (t/s) | Decode tg64 (t/s) |
+|---|---|---|---|
+| **Q4_0 (1.0 GB, recommended)** | **Hexagon NPU (HTP v79)** | **1916** (1605 in app) | **43.6** (43.1 in app) |
+| Q4_0 | CPU, 6 threads | 163 | 42.1 |
+| Q4_0 | Adreno 830 OpenCL | 212 | 16.6 |
+| **STQ1_0 1.25-bit (436 MB)** | CPU, cpu0-5, 6 threads | 80 (68 in app) | 36 (29 in app) |
+
+- NPU prefill is about 12x the CPU. Decode is bandwidth-bound, so NPU and CPU are close, and the 1.25-bit model reaches 36 t/s with under half the bytes.
+- On the 8 Elite the ggml thread pool stalls when spinning threads share the two prime cores (cpu6/7) with others (prefill drops to 9-15 t/s, decode
+  hangs), so the app pins to cpu0-5 only. Every pinning combination tried is in [docs/benchmarks.md](docs/benchmarks.md).
+- One phone, quiet room, no sustained-load thermal test. Q8_0 / Q4_K_M on the NPU, peak memory and other Snapdragon SoCs are not measured.
+
 ## What was done
 
 - **STQ1_0 kernel port.** Tencent's 1.25-bit model depends on the unmerged upstream llama.cpp [PR #22836](https://github.com/ggml-org/llama.cpp/pull/22836).

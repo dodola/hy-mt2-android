@@ -19,6 +19,8 @@ In the app (`BenchActivity`, default plan): Q4_0 on HTP0 pp128 1605 / tg64 43.1 
 Both translate `今天天气很好，我们去公园散步吧。` correctly (*The weather is great today. Let's go for a walk in the park.* /
 *...nice today; let's go for a walk in the park.*).
 
+Full tables (thread scaling, every pinning mask, in-app and short-sentence numbers, test conditions): [benchmarks.md](benchmarks.md#benchmarks---hy-mt2-18b-on-snapdragon-8-elite-sm8750).
+
 Takeaways: HTP is the clear prefill winner (~12x CPU) and ties the CPU on decode, which is bandwidth-bound; OpenCL decode is slow, so the app
 prefers HTP and only falls back to OpenCL when there is no HTP device. STQ1_0 stays CPU-only (no HTP/OpenCL kernel) and is the smallest option.
 

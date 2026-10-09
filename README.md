@@ -32,6 +32,20 @@ RK3588 的 Mali GPU 和 NPU 在测试固件上走不通（OpenCL 后端不接受
 
 解码受内存带宽限制，模型越小越快；预填充受计算限制，Q4_0 最快。完整表格与复现方法：[docs/benchmarks.md](docs/benchmarks.md)。
 
+## 实测数据（骁龙 8 Elite / SM8750，荣耀 PPG-AN00，Android 17）
+
+| 模型 | 后端 | 预填充 pp128 (t/s) | 解码 tg64 (t/s) |
+|---|---|---|---|
+| **Q4_0（1.0 GB，推荐）** | **Hexagon NPU（HTP v79）** | **1916**（App 内 1605） | **43.6**（App 内 43.1） |
+| Q4_0 | CPU，6 线程 | 163 | 42.1 |
+| Q4_0 | Adreno 830 OpenCL | 212 | 16.6 |
+| **STQ1_0 1.25bit（436 MB）** | CPU，cpu0–5，6 线程 | 80（App 内 68） | 36（App 内 29） |
+
+- NPU 预填充约是 CPU 的 12 倍；解码受内存带宽限制，NPU 和 CPU 差不多，1.25-bit 模型用不到一半的字节就跑到 36 t/s。
+- 骁龙 8 Elite 的两个 prime 核（cpu6/7）和其他线程一起自旋时，ggml 线程池会停滞（预填充掉到 9–15 t/s，解码卡死），
+  所以 App 只绑 cpu0–5；各种绑核组合的数据见 [docs/benchmarks.md](docs/benchmarks.md)。
+- 一台手机、安静环境、未做持续负载的降频测试；Q8_0 / Q4_K_M 在 NPU 上的速度、峰值内存、其他骁龙型号未测。
+
 ## 做了什么
 
 - **STQ1_0 内核移植**：Tencent 的 1.25-bit 模型依赖上游 llama.cpp 未合并的 [PR #22836](https://github.com/ggml-org/llama.cpp/pull/22836)，
