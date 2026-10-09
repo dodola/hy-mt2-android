@@ -1,0 +1,11 @@
+models/
+build/
+third_party/
+android/app/src/main/jniLibs/
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+*.apk
+*.gguf
