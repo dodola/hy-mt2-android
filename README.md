@@ -108,6 +108,11 @@ scripts/            构建、模型转换、基准脚本
 docs/               benchmarks / rk3588 / snapdragon
 ```
 
+## 许可
+
+本仓库代码以 [MIT](LICENSE) 发布。`patches/llama.cpp/` 是对 llama.cpp（MIT）的衍生修改，仍遵循其许可，
+其中 `0001–0003` 来自上游 PR #22836（作者 jinlongsong）。**模型权重不包含在内**，受 Hy-MT2 自己的许可约束，请自行查阅。
+
 ## 致谢
 
 [Tencent Hunyuan Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2)、[llama.cpp](https://github.com/ggml-org/llama.cpp)、
