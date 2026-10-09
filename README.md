@@ -1,3 +1,5 @@
+[English](README.en.md) | [简体中文](README.md)
+
 # Hy-MT2 on Android (Rockchip / Qualcomm)
 
 在 Android 手机和开发板上本地运行腾讯混元翻译模型 [Hy-MT2](https://github.com/Tencent-Hunyuan/Hy-MT2) 1.8B 的 App 与工具链。
