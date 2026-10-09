@@ -65,14 +65,15 @@ object CpuTopology {
 
     /**
      * Fastest cores: walk the distinct frequency tiers from the top and stop at the first
-     * drop larger than 15%, so e.g. RK3588 (2352/2304 vs 1800) yields cpu4-7.
+     * drop larger than [maxDrop] (default 15%), so e.g. RK3588 (2352/2304 vs 1800) yields cpu4-7.
+     * Snapdragon 8 Elite (2x4473 + 6x3532 MHz) needs a wider [maxDrop] to include the 6 performance cores.
      */
-    fun performanceCores(freqs: Map<Int, Long> = maxFrequencies()): List<Int> {
+    fun performanceCores(freqs: Map<Int, Long> = maxFrequencies(), maxDrop: Double = 0.15): List<Int> {
         if (freqs.isEmpty()) return emptyList()
         val tiers = freqs.values.distinct().sortedDescending()
         var cutoff = tiers.first()
         for (i in 1 until tiers.size) {
-            if (tiers[i].toDouble() < tiers[i - 1] * 0.85) break
+            if (tiers[i].toDouble() < tiers[i - 1] * (1.0 - maxDrop)) break
             cutoff = tiers[i]
         }
         return freqs.filterValues { it >= cutoff }.keys.sorted()

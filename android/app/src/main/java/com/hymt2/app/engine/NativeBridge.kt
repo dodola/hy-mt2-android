@@ -11,7 +11,7 @@ internal object NativeBridge {
         System.loadLibrary("hymt2_jni")
     }
 
-    external fun initBackends(nativeLibDir: String): String
+    external fun initBackends(nativeLibDir: String, adspDir: String): String
 
     /** Returns a handle, or 0 with a message in errOut[0]. */
     external fun load(

@@ -4,12 +4,15 @@
 # They are loaded at runtime by ggml_backend_load_all_from_path and skipped on devices that lack the hardware.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="${1:-$ROOT/build/snapdragon/pkg/llama.cpp/lib}"
+# Needs the GGML_BACKEND_DL build (SD_DL=1 scripts/build_snapdragon.sh): its plugins export ggml_backend_init and
+# land in pkg/llama.cpp/bin, the HTP skeletons in lib. The monolithic build's libs cannot be loaded by the app.
+PKG="${1:-$ROOT/build/snapdragon-dl/pkg/llama.cpp}"
 DST="$ROOT/android/app/src/main/jniLibs/arm64-v8a"
 mkdir -p "$DST"
-for f in libggml-opencl.so libggml-hexagon.so "$SRC"/libggml-htp-v*.so; do
+for f in libggml-opencl.so libggml-hexagon.so "$PKG"/lib/libggml-htp-v*.so; do
   f="$(basename "$f")"
-  [ -f "$SRC/$f" ] || { echo "missing $SRC/$f" >&2; exit 1; }
-  cp -f "$SRC/$f" "$DST/$f"
+  src="$PKG/bin/$f"; [ -f "$src" ] || src="$PKG/lib/$f"
+  [ -f "$src" ] || { echo "missing $f under $PKG/{bin,lib}" >&2; exit 1; }
+  cp -f "$src" "$DST/$f"
   echo "staged $f"
 done

@@ -36,8 +36,8 @@ hymt::Engine *engine_of(jlong h) { return reinterpret_cast<hymt::Engine *>(h); }
 extern "C" {
 
 JNIEXPORT jstring JNICALL
-Java_com_hymt2_app_engine_NativeBridge_initBackends(JNIEnv *env, jobject, jstring dir) {
-    return env->NewStringUTF(hymt::init_backends(to_std(env, dir)).c_str());
+Java_com_hymt2_app_engine_NativeBridge_initBackends(JNIEnv *env, jobject, jstring dir, jstring adspDir) {
+    return env->NewStringUTF(hymt::init_backends(to_std(env, dir), to_std(env, adspDir)).c_str());
 }
 
 // Returns the engine handle, or 0 with *error* delivered through errOut[0].

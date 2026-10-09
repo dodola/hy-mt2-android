@@ -68,14 +68,32 @@ ggml_backend_dev_t find_cpu_device() {
     return nullptr;
 }
 
+// Preferred non-CPU device: Hexagon NPU first, then Adreno OpenCL; nullptr if neither is registered.
+ggml_backend_dev_t find_accel_device() {
+    ggml_backend_dev_t gpu = nullptr;
+    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        auto *dev = ggml_backend_dev_get(i);
+        const std::string name = ggml_backend_dev_name(dev);
+        if (name.rfind("HTP", 0) == 0) return dev;
+        if (!gpu && ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU) gpu = dev;
+    }
+    return gpu;
+}
+
 }  // namespace
 
-std::string init_backends(const std::string &dir) {
+std::string init_backends(const std::string &dir, const std::string &adsp_dir) {
     llama_log_set(log_callback, nullptr);
     // The Hexagon DSP finds libggml-htp-v*.so (skeletons) through ADSP_LIBRARY_PATH; the stock vendor dirs stay.
-    const std::string adsp = dir + ";/vendor/lib/rfsa/adsp;/vendor/dsp/cdsp;/system/lib/rfsa/adsp";
-    setenv("ADSP_LIBRARY_PATH", adsp.c_str(), 0);
+    const std::string adsp = adsp_dir + ";/vendor/lib/rfsa/adsp;/vendor/dsp/cdsp;/system/lib/rfsa/adsp";
+    setenv("ADSP_LIBRARY_PATH", adsp.c_str(), 1);
     ggml_backend_load_all_from_path(dir.c_str());
+    // load_all is silent in release builds; retry the optional backends explicitly so a dlopen failure is logged.
+    for (const char *name : {"opencl", "hexagon"}) {
+        const std::string path = dir + "/libggml-" + name + ".so";
+        if (access(path.c_str(), R_OK) != 0 || ggml_backend_reg_by_name(name)) continue;
+        if (!ggml_backend_load(path.c_str())) LOGE("optional backend %s not loaded from %s", name, path.c_str());
+    }
     llama_backend_init();
     std::string out;
     for (size_t i = 0; i < ggml_backend_reg_count(); ++i) {
@@ -156,7 +174,11 @@ std::string Engine::load(const EngineConfig &cfg) {
     llama_model_params mp = llama_model_default_params();
     mp.load_mode = cfg.use_mmap ? LLAMA_LOAD_MODE_MMAP : LLAMA_LOAD_MODE_NONE;
     ggml_backend_dev_t cpu_only[2] = {nullptr, nullptr};
-    if (cfg.offload) {
+    ggml_backend_dev_t accel[2] = {nullptr, nullptr};
+    if (cfg.offload && (accel[0] = find_accel_device())) {
+        // One accelerator only: splitting layers across HTP and OpenCL is slower than HTP alone
+        // (SM8750: pp128 1916 vs 212 t/s, tg64 43.6 vs 16.6 t/s for Q4_0).
+        mp.devices = accel;
         mp.n_gpu_layers = 99;
     } else {
         cpu_only[0] = find_cpu_device();

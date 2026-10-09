@@ -44,7 +44,8 @@ struct GenStats {
 using PieceCallback = std::function<bool(const std::string &)>;
 
 // Registers and loads ggml backends found in `dir`; returns a description of what loaded.
-std::string init_backends(const std::string &dir);
+// `adsp_dir` holds the Hexagon skeletons (libggml-htp-v*.so) for the DSP to load; keep its path free of '~'/'='.
+std::string init_backends(const std::string &dir, const std::string &adsp_dir);
 
 class Engine {
 public:

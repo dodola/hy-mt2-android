@@ -1,6 +1,7 @@
 package com.hymt2.app.engine
 
 import android.content.Context
+import java.io.File
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -78,9 +79,25 @@ class LlamaEngine private constructor() : InferenceEngine {
 
     companion object {
         /** Registers ggml backends found in the app's native lib dir; returns their names. */
-        fun initBackends(context: Context): List<String> =
-            NativeBridge.initBackends(context.applicationInfo.nativeLibraryDir)
+        fun initBackends(context: Context): List<String> {
+            val nativeDir = context.applicationInfo.nativeLibraryDir
+            return NativeBridge.initBackends(nativeDir, stageHtpSkeletons(context, nativeDir))
                 .split(',').filter { it.isNotBlank() }
+        }
+
+        /**
+         * FastRPC resolves the DSP skeleton through ADSP_LIBRARY_PATH; the installed lib dir
+         * (/data/app/~~...==/...) is not reliable there, so serve the skeletons from files/htp.
+         */
+        private fun stageHtpSkeletons(context: Context, nativeDir: String): String {
+            val dst = File(context.filesDir, "htp").apply { mkdirs() }
+            File(nativeDir).listFiles { f -> f.name.startsWith("libggml-htp-v") && f.name.endsWith(".so") }
+                ?.forEach { src ->
+                    val out = File(dst, src.name)
+                    if (out.length() != src.length()) runCatching { src.copyTo(out, overwrite = true) }
+                }
+            return dst.absolutePath
+        }
 
         fun create(): InferenceEngine = LlamaEngine()
     }
